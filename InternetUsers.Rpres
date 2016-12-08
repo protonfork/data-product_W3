@@ -1,0 +1,93 @@
+World Internet Users per Countries
+========================================================
+author: Nicolas
+date: 06/12/2016
+autosize: true
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyr)
+library(dplyr)
+library(plotly)
+library(RColorBrewer)
+```
+
+Summary
+========================================================
+
+The World Bank provides several dataset open for exploration and mining. Following slides study the relation between internet user per 100 people in a country (showing the penetration of Internet within the country) and the National Income per Capita. Study is done for 2014 only.
+
+The set shows a clear correlation between the two elements with a better presence of internet in the richest countries. In addition, we can see a clear positionning of each region of the word (Europe leading clearly, in pourcent of internet users, Africa being the region with the most potential of growth).
+
+Data Download
+========================================================
+
+Data is get from the Databank of the Word Bank. 
+We also catch the ISO Countries Codes from Lukes Github.
+
+```{r, cache=TRUE}
+url <- "http://databank.worldbank.org/data/download/WDI_csv.zip"
+download.file(url,"WDI_csv.zip")
+unzip("WDI_csv.zip")
+df.Data <- read.csv("WDI_Data.csv")
+url.ISOCode <- "https://raw.githubusercontent.com/lukes/ISO-3166-Countries-with-Regional-Codes/master/all/all.csv"
+df.ISOCode <- read.csv(url.ISOCode)
+```
+
+Data Processing
+========================================================
+
+We filter the Indicator to the ones related to Internet, and Income. Then the dataset is optimized for the visualisation thanks to tidyrs package. We also limits to the recent year (we do not expect to use any year before 1995)
+
+```{r}
+df.DataInt <- subset(df.Data,grepl("IT.NET|NY.ADJ|SP.POP",Indicator.Code)) %>%
+        subset((Country.Code %in% df.ISOCode$alpha.3)) %>%
+        select(-Indicator.Name) %>%
+        gather(Year,Value,-Country.Code, -Country.Name, -Indicator.Code)
+df.DataInt$Year <- gsub("X","", df.DataInt$Year)
+df.DataInt <- df.DataInt[as.numeric(df.DataInt$Year)>=1995,]
+df.DataInt <- spread(df.DataInt,Indicator.Code,Value,fill=0)
+```
+
+Worldwide Internet User in 2014 
+========================================================
+```{r, echo=FALSE}
+library(plotly)
+p <- subset(df.DataInt,Year=="2014") %>%
+        subset(NY.ADJ.NNTY.PC.CD!=0) %>%
+        mutate(Total.Internet.Pop = round(SP.POP.TOTL*IT.NET.USER.P2/100,0)) %>%
+        merge(df.ISOCode,by.x="Country.Code",by.y="alpha.3") %>%
+        plot_ly(x=~NY.ADJ.NNTY.PC.CD,y=~IT.NET.USER.P2, size=~Total.Internet.Pop,sizes=c(5000/max(.$Total.Internet.Pop,na.rm=T)+10,5000+10),
+                color=~region, hoverinfo = 'text',mode = 'markers',
+                type = 'scatter',text = ~paste(Country.Name, 
+                '</br> Income Per Capita: ', round(NY.ADJ.NNTY.PC.CD/1000,0),'kUS$',
+                '</br> Internet User Per 100p: ', round(IT.NET.USER.P2,0),
+                '</br> Total Internet User: ', round(Total.Internet.Pop/1000000,0),'M'),
+                colors = brewer.pal(8,"Accent")) %>%
+        layout(title = 'Internet User Increase with Net national income per capita',
+               xaxis = list(title = 'Adjusted net national income per capita (current US$)', zeroline = TRUE),
+               yaxis = list(title = 'Internet users (per 100 people)'))
+htmlwidgets::saveWidget(as.widget(p), file = "demo.html")
+```
+<iframe src="demo.html" style="position:absolute;height:100%;width:100%"></iframe>
+
+Plot Code of the previous Slide
+========================================================
+```{r, eval=FALSE}
+library(plotly)
+subset(df.DataInt,Year=="2014") %>%
+        subset(NY.ADJ.NNTY.PC.CD!=0) %>%
+        mutate(Total.Internet.Pop = round(SP.POP.TOTL*IT.NET.USER.P2/100,0)) %>%
+        merge(df.ISOCode,by.x="Country.Code",by.y="alpha.3") %>%
+        plot_ly(x=~NY.ADJ.NNTY.PC.CD,y=~IT.NET.USER.P2, size=~Total.Internet.Pop,sizes=c(5000/max(.$Total.Internet.Pop,na.rm=T)+10,5000+10),
+                color=~region, hoverinfo = 'text',mode = 'markers',
+                type = 'scatter',text = ~paste(Country.Name, 
+                                               '</br> Income Per Capita: ', round(NY.ADJ.NNTY.PC.CD/1000,0),'kUS$',
+                                               '</br> Internet User Per 100p: ', round(IT.NET.USER.P2,0),
+                                               '</br> Total Internet User: ', round(Total.Internet.Pop/1000000,0),'M'),
+                colors = brewer.pal(8,"Accent")) %>%
+        layout(title = 'Internet User Increase with Net national income per capita',
+               xaxis = list(title = 'Adjusted net national income per capita (current US$)',
+                            zeroline = TRUE),
+               yaxis = list(title = 'Internet users (per 100 people)'))
+```
